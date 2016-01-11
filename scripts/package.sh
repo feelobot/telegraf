@@ -37,7 +37,7 @@ CONFIG_ROOT_DIR=/etc/opt/telegraf
 CONFIG_D_DIR=/etc/opt/telegraf/telegraf.d
 LOGROTATE_DIR=/etc/logrotate.d
 
-SAMPLE_CONFIGURATION=etc/config.sample.toml
+SAMPLE_CONFIGURATION=etc/telegraf.conf
 LOGROTATE_CONFIGURATION=etc/logrotate.d/telegraf
 INITD_SCRIPT=scripts/init.sh
 SYSTEMD_SCRIPT=scripts/telegraf.service
@@ -134,7 +134,8 @@ do_build() {
         rm -f $GOPATH_INSTALL/bin/$b
     done
 
-    godep go install -ldflags="-X main.Version $version" ./...
+    gdm restore
+    go install -ldflags="-X main.Version $version" ./...
     if [ $? -ne 0 ]; then
         echo "Build failed, unable to create package -- aborting"
         cleanup_exit 1

@@ -54,10 +54,10 @@ check_go_fmt
 exit_if_fail make
 
 # Run the tests
-exit_if_fail godep go vet ./...
+exit_if_fail go vet ./...
 exit_if_fail make docker-run-circle
 sleep 10
-exit_if_fail godep go test -race ./...
+exit_if_fail go test -race ./...
 
 # Simple Integration Tests
 #   check that version was properly set
@@ -66,6 +66,6 @@ exit_if_fail "./telegraf -version | grep $VERSION"
 tmpdir=$(mktemp -d)
 ./telegraf -sample-config > $tmpdir/config.toml
 exit_if_fail ./telegraf -config $tmpdir/config.toml \
-    -test -filter cpu:mem
+    -test -input-filter cpu:mem
 
 exit $rc

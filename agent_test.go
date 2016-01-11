@@ -5,67 +5,106 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdb/telegraf/internal"
+	"github.com/influxdb/telegraf/internal/config"
 
 	// needing to load the plugins
-	_ "github.com/influxdb/telegraf/plugins/all"
+	_ "github.com/influxdb/telegraf/plugins/inputs/all"
 	// needing to load the outputs
-	_ "github.com/influxdb/telegraf/outputs/all"
+	_ "github.com/influxdb/telegraf/plugins/outputs/all"
 )
 
 func TestAgent_LoadPlugin(t *testing.T) {
+	c := config.NewConfig()
+	c.InputFilters = []string{"mysql"}
+	err := c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ := NewAgent(c)
+	assert.Equal(t, 1, len(a.Config.Inputs))
 
-	// load a dedicated configuration file
-	config, _ := LoadConfig("./testdata/telegraf-agent.toml")
-	a, _ := NewAgent(config)
+	c = config.NewConfig()
+	c.InputFilters = []string{"foo"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 0, len(a.Config.Inputs))
 
-	pluginsEnabled, _ := a.LoadPlugins([]string{"mysql"}, config)
-	assert.Equal(t, 1, len(pluginsEnabled))
+	c = config.NewConfig()
+	c.InputFilters = []string{"mysql", "foo"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 1, len(a.Config.Inputs))
 
-	pluginsEnabled, _ = a.LoadPlugins([]string{"foo"}, config)
-	assert.Equal(t, 0, len(pluginsEnabled))
+	c = config.NewConfig()
+	c.InputFilters = []string{"mysql", "redis"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 2, len(a.Config.Inputs))
 
-	pluginsEnabled, _ = a.LoadPlugins([]string{"mysql", "foo"}, config)
-	assert.Equal(t, 1, len(pluginsEnabled))
-
-	pluginsEnabled, _ = a.LoadPlugins([]string{"mysql", "redis"}, config)
-	assert.Equal(t, 2, len(pluginsEnabled))
-
-	pluginsEnabled, _ = a.LoadPlugins([]string{"mysql", "foo", "redis", "bar"}, config)
-	assert.Equal(t, 2, len(pluginsEnabled))
+	c = config.NewConfig()
+	c.InputFilters = []string{"mysql", "foo", "redis", "bar"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 2, len(a.Config.Inputs))
 }
 
 func TestAgent_LoadOutput(t *testing.T) {
-	// load a dedicated configuration file
-	config, _ := LoadConfig("./testdata/telegraf-agent.toml")
-	a, _ := NewAgent(config)
+	c := config.NewConfig()
+	c.OutputFilters = []string{"influxdb"}
+	err := c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ := NewAgent(c)
+	assert.Equal(t, 2, len(a.Config.Outputs))
 
-	outputsEnabled, _ := a.LoadOutputs([]string{"influxdb"}, config)
-	assert.Equal(t, 1, len(outputsEnabled))
+	c = config.NewConfig()
+	c.OutputFilters = []string{"kafka"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 1, len(a.Config.Outputs))
 
-	outputsEnabled, _ = a.LoadOutputs([]string{}, config)
-	assert.Equal(t, 2, len(outputsEnabled))
+	c = config.NewConfig()
+	c.OutputFilters = []string{}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 3, len(a.Config.Outputs))
 
-	outputsEnabled, _ = a.LoadOutputs([]string{"foo"}, config)
-	assert.Equal(t, 0, len(outputsEnabled))
+	c = config.NewConfig()
+	c.OutputFilters = []string{"foo"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 0, len(a.Config.Outputs))
 
-	outputsEnabled, _ = a.LoadOutputs([]string{"influxdb", "foo"}, config)
-	assert.Equal(t, 1, len(outputsEnabled))
+	c = config.NewConfig()
+	c.OutputFilters = []string{"influxdb", "foo"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 2, len(a.Config.Outputs))
 
-	outputsEnabled, _ = a.LoadOutputs([]string{"influxdb", "kafka"}, config)
-	assert.Equal(t, 2, len(outputsEnabled))
+	c = config.NewConfig()
+	c.OutputFilters = []string{"influxdb", "kafka"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(c.Outputs))
+	a, _ = NewAgent(c)
+	assert.Equal(t, 3, len(a.Config.Outputs))
 
-	outputsEnabled, _ = a.LoadOutputs([]string{"influxdb", "foo", "kafka", "bar"}, config)
-	assert.Equal(t, 2, len(outputsEnabled))
+	c = config.NewConfig()
+	c.OutputFilters = []string{"influxdb", "foo", "kafka", "bar"}
+	err = c.LoadConfig("./internal/config/testdata/telegraf-agent.toml")
+	assert.NoError(t, err)
+	a, _ = NewAgent(c)
+	assert.Equal(t, 3, len(a.Config.Outputs))
 }
 
 func TestAgent_ZeroJitter(t *testing.T) {
-	a := &Agent{
-		FlushInterval: internal.Duration{10 * time.Second},
-		FlushJitter:   internal.Duration{0 * time.Second},
-	}
-	flushinterval := jitterInterval(a.FlushInterval.Duration,
-		a.FlushJitter.Duration)
+	flushinterval := jitterInterval(time.Duration(10*time.Second),
+		time.Duration(0*time.Second))
 
 	actual := flushinterval.Nanoseconds()
 	exp := time.Duration(10 * time.Second).Nanoseconds()
@@ -80,13 +119,8 @@ func TestAgent_ZeroInterval(t *testing.T) {
 	max := time.Duration(5 * time.Second).Nanoseconds()
 
 	for i := 0; i < 1000; i++ {
-		a := &Agent{
-			FlushInterval: internal.Duration{0 * time.Second},
-			FlushJitter:   internal.Duration{5 * time.Second},
-		}
-
-		flushinterval := jitterInterval(a.FlushInterval.Duration,
-			a.FlushJitter.Duration)
+		flushinterval := jitterInterval(time.Duration(0*time.Second),
+			time.Duration(5*time.Second))
 		actual := flushinterval.Nanoseconds()
 
 		if actual > max {
@@ -101,13 +135,8 @@ func TestAgent_ZeroInterval(t *testing.T) {
 }
 
 func TestAgent_ZeroBoth(t *testing.T) {
-	a := &Agent{
-		FlushInterval: internal.Duration{0 * time.Second},
-		FlushJitter:   internal.Duration{0 * time.Second},
-	}
-
-	flushinterval := jitterInterval(a.FlushInterval.Duration,
-		a.FlushJitter.Duration)
+	flushinterval := jitterInterval(time.Duration(0*time.Second),
+		time.Duration(0*time.Second))
 
 	actual := flushinterval
 	exp := time.Duration(500 * time.Millisecond)
@@ -121,12 +150,8 @@ func TestAgent_JitterMax(t *testing.T) {
 	max := time.Duration(32 * time.Second).Nanoseconds()
 
 	for i := 0; i < 1000; i++ {
-		a := &Agent{
-			FlushInterval: internal.Duration{30 * time.Second},
-			FlushJitter:   internal.Duration{2 * time.Second},
-		}
-		flushinterval := jitterInterval(a.FlushInterval.Duration,
-			a.FlushJitter.Duration)
+		flushinterval := jitterInterval(time.Duration(30*time.Second),
+			time.Duration(2*time.Second))
 		actual := flushinterval.Nanoseconds()
 		if actual > max {
 			t.Errorf("Didn't expect interval %d to be > %d", actual, max)
@@ -139,12 +164,8 @@ func TestAgent_JitterMin(t *testing.T) {
 	min := time.Duration(30 * time.Second).Nanoseconds()
 
 	for i := 0; i < 1000; i++ {
-		a := &Agent{
-			FlushInterval: internal.Duration{30 * time.Second},
-			FlushJitter:   internal.Duration{2 * time.Second},
-		}
-		flushinterval := jitterInterval(a.FlushInterval.Duration,
-			a.FlushJitter.Duration)
+		flushinterval := jitterInterval(time.Duration(30*time.Second),
+			time.Duration(2*time.Second))
 		actual := flushinterval.Nanoseconds()
 		if actual < min {
 			t.Errorf("Didn't expect interval %d to be < %d", actual, min)

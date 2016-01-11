@@ -9,41 +9,97 @@ import (
 	"strings"
 
 	"github.com/influxdb/telegraf"
-	_ "github.com/influxdb/telegraf/outputs/all"
-	_ "github.com/influxdb/telegraf/plugins/all"
+	"github.com/influxdb/telegraf/internal/config"
+	_ "github.com/influxdb/telegraf/plugins/inputs/all"
+	_ "github.com/influxdb/telegraf/plugins/outputs/all"
 )
 
 var fDebug = flag.Bool("debug", false,
 	"show metrics as they're generated to stdout")
 var fTest = flag.Bool("test", false, "gather metrics, print them out, and exit")
 var fConfig = flag.String("config", "", "configuration file to load")
-var fConfigDirectory = flag.String("configdirectory", "",
-	"directory containing additional configuration files")
+var fConfigDirectory = flag.String("config-directory", "",
+	"directory containing additional *.conf files")
 var fVersion = flag.Bool("version", false, "display the version")
 var fSampleConfig = flag.Bool("sample-config", false,
 	"print out full sample configuration")
 var fPidfile = flag.String("pidfile", "", "file to write our pid to")
-var fPLuginFilters = flag.String("filter", "",
+var fInputFilters = flag.String("input-filter", "",
 	"filter the plugins to enable, separator is :")
-var fOutputFilters = flag.String("outputfilter", "",
+var fOutputFilters = flag.String("output-filter", "",
 	"filter the outputs to enable, separator is :")
 var fUsage = flag.String("usage", "",
 	"print usage for a plugin, ie, 'telegraf -usage mysql'")
+
+var fInputFiltersLegacy = flag.String("filter", "",
+	"filter the plugins to enable, separator is :")
+var fOutputFiltersLegacy = flag.String("outputfilter", "",
+	"filter the outputs to enable, separator is :")
+var fConfigDirectoryLegacy = flag.String("configdirectory", "",
+	"directory containing additional *.conf files")
 
 // Telegraf version
 //	-ldflags "-X main.Version=`git describe --always --tags`"
 var Version string
 
+const usage = `Telegraf, The plugin-driven server agent for collecting and reporting metrics.
+
+Usage:
+
+  telegraf <flags>
+
+The flags are:
+
+  -config <file>     configuration file to load
+  -test              gather metrics once, print them to stdout, and exit
+  -sample-config     print out full sample configuration to stdout
+  -config-directory  directory containing additional *.conf files
+  -input-filter      filter the input plugins to enable, separator is :
+  -output-filter     filter the output plugins to enable, separator is :
+  -usage             print usage for a plugin, ie, 'telegraf -usage mysql'
+  -version           print the version to stdout
+
+Examples:
+
+  # generate a telegraf config file:
+  telegraf -sample-config > telegraf.conf
+
+  # generate config with only cpu input & influxdb output plugins defined
+  telegraf -sample-config -input-filter cpu -output-filter influxdb
+
+  # run a single telegraf collection, outputing metrics to stdout
+  telegraf -config telegraf.conf -test
+
+  # run telegraf with all plugins defined in config file
+  telegraf -config telegraf.conf
+
+  # run telegraf, enabling the cpu & memory input, and influxdb output plugins
+  telegraf -config telegraf.conf -input-filter cpu:mem -output-filter influxdb
+`
+
 func main() {
+	flag.Usage = usageExit
 	flag.Parse()
 
-	var pluginFilters []string
-	if *fPLuginFilters != "" {
-		pluginsFilter := strings.TrimSpace(*fPLuginFilters)
-		pluginFilters = strings.Split(":"+pluginsFilter+":", ":")
+	if flag.NFlag() == 0 {
+		usageExit()
+	}
+
+	var inputFilters []string
+	if *fInputFiltersLegacy != "" {
+		inputFilter := strings.TrimSpace(*fInputFiltersLegacy)
+		inputFilters = strings.Split(":"+inputFilter+":", ":")
+	}
+	if *fInputFilters != "" {
+		inputFilter := strings.TrimSpace(*fInputFilters)
+		inputFilters = strings.Split(":"+inputFilter+":", ":")
 	}
 
 	var outputFilters []string
+	if *fOutputFiltersLegacy != "" {
+		outputFilter := strings.TrimSpace(*fOutputFiltersLegacy)
+		outputFilters = strings.Split(":"+outputFilter+":", ":")
+	}
 	if *fOutputFilters != "" {
 		outputFilter := strings.TrimSpace(*fOutputFilters)
 		outputFilters = strings.Split(":"+outputFilter+":", ":")
@@ -56,13 +112,13 @@ func main() {
 	}
 
 	if *fSampleConfig {
-		telegraf.PrintSampleConfig(pluginFilters, outputFilters)
+		config.PrintSampleConfig(inputFilters, outputFilters)
 		return
 	}
 
 	if *fUsage != "" {
-		if err := telegraf.PrintPluginConfig(*fUsage); err != nil {
-			if err2 := telegraf.PrintOutputConfig(*fUsage); err2 != nil {
+		if err := config.PrintInputConfig(*fUsage); err != nil {
+			if err2 := config.PrintOutputConfig(*fUsage); err2 != nil {
 				log.Fatalf("%s and %s", err, err2)
 			}
 		}
@@ -70,12 +126,15 @@ func main() {
 	}
 
 	var (
-		config *telegraf.Config
-		err    error
+		c   *config.Config
+		err error
 	)
 
 	if *fConfig != "" {
-		config, err = telegraf.LoadConfig(*fConfig)
+		c = config.NewConfig()
+		c.OutputFilters = outputFilters
+		c.InputFilters = inputFilters
+		err = c.LoadConfig(*fConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -85,38 +144,33 @@ func main() {
 		return
 	}
 
-	if *fConfigDirectory != "" {
-		err = config.LoadDirectory(*fConfigDirectory)
+	if *fConfigDirectoryLegacy != "" {
+		err = c.LoadDirectory(*fConfigDirectoryLegacy)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	ag, err := telegraf.NewAgent(config)
+	if *fConfigDirectory != "" {
+		err = c.LoadDirectory(*fConfigDirectory)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	if len(c.Outputs) == 0 {
+		log.Fatalf("Error: no outputs found, did you provide a valid config file?")
+	}
+	if len(c.Inputs) == 0 {
+		log.Fatalf("Error: no plugins found, did you provide a valid config file?")
+	}
+
+	ag, err := telegraf.NewAgent(c)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if *fDebug {
-		ag.Debug = true
-	}
-
-	outputs, err := ag.LoadOutputs(outputFilters, config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if len(outputs) == 0 {
-		log.Printf("Error: no outputs found, did you provide a valid config file?")
-		os.Exit(1)
-	}
-
-	plugins, err := ag.LoadPlugins(pluginFilters, config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if len(plugins) == 0 {
-		log.Printf("Error: no plugins found, did you provide a valid config file?")
-		os.Exit(1)
+		ag.Config.Agent.Debug = true
 	}
 
 	if *fTest {
@@ -141,9 +195,9 @@ func main() {
 	}()
 
 	log.Printf("Starting Telegraf (version %s)\n", Version)
-	log.Printf("Loaded outputs: %s", strings.Join(outputs, " "))
-	log.Printf("Loaded plugins: %s", strings.Join(plugins, " "))
-	log.Printf("Tags enabled: %s", config.ListTags())
+	log.Printf("Loaded outputs: %s", strings.Join(c.OutputNames(), " "))
+	log.Printf("Loaded plugins: %s", strings.Join(c.InputNames(), " "))
+	log.Printf("Tags enabled: %s", c.ListTags())
 
 	if *fPidfile != "" {
 		f, err := os.Create(*fPidfile)
@@ -157,4 +211,9 @@ func main() {
 	}
 
 	ag.Run(shutdown)
+}
+
+func usageExit() {
+	fmt.Println(usage)
+	os.Exit(0)
 }

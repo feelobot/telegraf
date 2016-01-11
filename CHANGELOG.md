@@ -1,4 +1,115 @@
-## v0.2.1 [unreleased]
+## v0.10.0 [unreleased]
+
+### Release Notes
+- Linux packages have been taken out of `opt`, the binary is now in `/usr/bin`
+and configuration files are in `/etc/telegraf`
+- **breaking change** `plugins` have been renamed to `inputs`. This was done because
+`plugins` is too generic, as there are now also "output plugins", and will likely
+be "aggregator plugins" and "filter plugins" in the future. Additionally,
+`inputs/` and `outputs/` directories have been placed in the root-level `plugins/`
+directory.
+- **breaking change** the `io` plugin has been renamed `diskio`
+- **breaking change** plugin measurements aggregated into a single measurement.
+- **breaking change** `jolokia` plugin: must use global tag/drop/pass parameters
+for configuration.
+- **breaking change** `twemproxy` plugin: `prefix` option removed.
+- **breaking change** `procstat` cpu measurements are now prepended with `cpu_time_`
+instead of only `cpu_`
+- **breaking change** some command-line flags have been renamed to separate words.
+`-configdirectory` -> `-config-directory`, `-filter` -> `-input-filter`,
+`-outputfilter` -> `-output-filter`
+- The prometheus plugin schema has not been changed (measurements have not been
+aggregated).
+
+### Packaging change note:
+
+RHEL/CentOS users upgrading from 0.2.x to 0.10.0 will probably have their
+configurations overwritten by the upgrade. There is a backup stored at
+/etc/telegraf/telegraf.conf.$(date +%s).backup.
+
+### Features
+- Plugin measurements aggregated into a single measurement.
+- Added ability to specify per-plugin tags
+- Added ability to specify per-plugin measurement suffix and prefix.
+(`name_prefix` and `name_suffix`)
+- Added ability to override base plugin measurement name. (`name_override`)
+
+### Bugfixes
+
+## v0.2.5 [unreleased]
+
+### Features
+- [#427](https://github.com/influxdb/telegraf/pull/427): zfs plugin: pool stats added. Thanks @allenpetersen!
+- [#428](https://github.com/influxdb/telegraf/pull/428): Amazon Kinesis output. Thanks @jimmystewpot!
+- [#449](https://github.com/influxdb/telegraf/pull/449): influxdb plugin, thanks @mark-rushakoff
+
+### Bugfixes
+- [#430](https://github.com/influxdb/telegraf/issues/430): Network statistics removed in elasticsearch 2.1. Thanks @jipperinbham!
+- [#452](https://github.com/influxdb/telegraf/issues/452): Elasticsearch open file handles error. Thanks @jipperinbham!
+
+## v0.2.4 [2015-12-08]
+
+### Features
+- [#412](https://github.com/influxdb/telegraf/pull/412): Additional memcached stats. Thanks @mgresser!
+- [#410](https://github.com/influxdb/telegraf/pull/410): Additional redis metrics. Thanks @vlaadbrain!
+- [#414](https://github.com/influxdb/telegraf/issues/414): Jolokia plugin auth parameters
+- [#415](https://github.com/influxdb/telegraf/issues/415): memcached plugin: support unix sockets
+- [#418](https://github.com/influxdb/telegraf/pull/418): memcached plugin additional unit tests.
+- [#408](https://github.com/influxdb/telegraf/pull/408): MailChimp plugin.
+- [#382](https://github.com/influxdb/telegraf/pull/382): Add system wide network protocol stats to `net` plugin.
+- [#401](https://github.com/influxdb/telegraf/pull/401): Support pass/drop/tagpass/tagdrop for outputs. Thanks @oldmantaiter!
+
+### Bugfixes
+- [#405](https://github.com/influxdb/telegraf/issues/405): Prometheus output cardinality issue
+- [#388](https://github.com/influxdb/telegraf/issues/388): Fix collection hangup when cpu times decrement.
+
+## v0.2.3 [2015-11-30]
+
+### Release Notes
+- **breaking change** The `kafka` plugin has been renamed to `kafka_consumer`.
+and most of the config option names have changed.
+This only affects the kafka consumer _plugin_ (not the
+output). There were a number of problems with the kafka plugin that led to it
+only collecting data once at startup, so the kafka plugin was basically non-
+functional.
+- Plugins can now be specified as a list, and multiple plugin instances of the
+same type can be specified, like this:
+
+```
+[[inputs.cpu]]
+  percpu = false
+  totalcpu = true
+
+[[inputs.cpu]]
+  percpu = true
+  totalcpu = false
+  drop = ["cpu_time"]
+```
+
+- Riemann output added
+- Aerospike plugin: tag changed from `host` -> `aerospike_host`
+
+### Features
+- [#379](https://github.com/influxdb/telegraf/pull/379): Riemann output, thanks @allenj!
+- [#375](https://github.com/influxdb/telegraf/pull/375): kafka_consumer service plugin.
+- [#392](https://github.com/influxdb/telegraf/pull/392): Procstat plugin can now accept pgrep -f pattern, thanks @ecarreras!
+- [#383](https://github.com/influxdb/telegraf/pull/383): Specify plugins as a list.
+- [#354](https://github.com/influxdb/telegraf/pull/354): Add ability to specify multiple metrics in one statsd line. Thanks @MerlinDMC!
+
+### Bugfixes
+- [#371](https://github.com/influxdb/telegraf/issues/371): Kafka consumer plugin not functioning.
+- [#389](https://github.com/influxdb/telegraf/issues/389): NaN value panic
+
+## v0.2.2 [2015-11-18]
+
+### Release Notes
+- 0.2.1 has a bug where all lists within plugins get duplicated, this includes
+lists of servers/URLs. 0.2.2 is being released solely to fix that bug
+
+### Bugfixes
+- [#377](https://github.com/influxdb/telegraf/pull/377): Fix for duplicate slices in inputs.
+
+## v0.2.1 [2015-11-16]
 
 ### Release Notes
 - Telegraf will no longer use docker-compose for "long" unit test, it has been
@@ -8,6 +119,9 @@ changed to just run docker commands in the Makefile. See `make docker-run` and
 - Redis plugin tag has changed from `host` to `server`
 - HAProxy plugin tag has changed from `host` to `server`
 - UDP output now supported
+- Telegraf will now compile on FreeBSD
+- Users can now specify outputs as lists, specifying multiple outputs of the
+same type.
 
 ### Features
 - [#325](https://github.com/influxdb/telegraf/pull/325): NSQ output. Thanks @jrxFive!
@@ -18,10 +132,14 @@ changed to just run docker commands in the Makefile. See `make docker-run` and
 - [#365](https://github.com/influxdb/telegraf/pull/365): Twemproxy plugin by @codeb2cc
 - [#317](https://github.com/influxdb/telegraf/issues/317): ZFS plugin, thanks @cornerot!
 - [#364](https://github.com/influxdb/telegraf/pull/364): Support InfluxDB UDP output.
+- [#370](https://github.com/influxdb/telegraf/pull/370): Support specifying multiple outputs, as lists.
+- [#372](https://github.com/influxdb/telegraf/pull/372): Remove gosigar and update go-dockerclient for FreeBSD support. Thanks @MerlinDMC!
 
 ### Bugfixes
 - [#331](https://github.com/influxdb/telegraf/pull/331): Dont overwrite host tag in redis plugin.
 - [#336](https://github.com/influxdb/telegraf/pull/336): Mongodb plugin should take 2 measurements.
+- [#351](https://github.com/influxdb/telegraf/issues/317): Fix continual "CREATE DATABASE" in writes
+- [#360](https://github.com/influxdb/telegraf/pull/360): Apply prefix before ShouldPass check. Thanks @sotfo!
 
 ## v0.2.0 [2015-10-27]
 
@@ -50,7 +168,7 @@ be controlled via the `round_interval` and `flush_jitter` config options.
 - [#241](https://github.com/influxdb/telegraf/pull/241): MQTT Output. Thanks @shirou!
 - Memory plugin: cached and buffered measurements re-added
 - Logging: additional logging for each collection interval, track the number
-of metrics collected and from how many plugins.
+of metrics collected and from how many inputs.
 - [#240](https://github.com/influxdb/telegraf/pull/240): procstat plugin, thanks @ranjib!
 - [#244](https://github.com/influxdb/telegraf/pull/244): netstat plugin, thanks @shirou!
 - [#262](https://github.com/influxdb/telegraf/pull/262): zookeeper plugin, thanks @jrxFive!
@@ -83,7 +201,7 @@ will still be backwards compatible if only `url` is specified.
 - The -test flag will now output two metric collections
 - Support for filtering telegraf outputs on the CLI -- Telegraf will now
 allow filtering of output sinks on the command-line using the `-outputfilter`
-flag, much like how the `-filter` flag works for plugins.
+flag, much like how the `-filter` flag works for inputs.
 - Support for filtering on config-file creation -- Telegraf now supports
 filtering to -sample-config command. You can now run
 `telegraf -sample-config -filter cpu -outputfilter influxdb` to get a config
